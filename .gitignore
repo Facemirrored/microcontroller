@@ -2,3 +2,4 @@ build
 .idea
 esp-idf
 cmake-build-debug-*
+sdkconfig
