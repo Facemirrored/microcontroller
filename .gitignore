@@ -1,0 +1,4 @@
+build
+.idea
+esp-idf
+cmake-build-debug-*
