@@ -1,11 +1,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <stdio.h>
 #include <driver/gpio.h>
 
 #include "rom/ets_sys.h"
 
-// https://www.mikrocontroller.net/articles/HD44780
+// EPS32-API: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/index.html
+// ESP32-Datasheet: https://m.media-amazon.com/images/I/A1oyy-n8xfL.pdf
+// LCD-Datasheet: https://www.mikrocontroller.net/articles/HD44780
 
 // LCD output data
 #define GPIO_LCD_D4 GPIO_NUM_33
@@ -156,7 +157,7 @@ void app_main(void) {
 
     initDisplay();
 
-    sendMultiText("Hello There!", "Controller ready");
+    sendMultiText("Hello friend!", "Controller ready");
 
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
