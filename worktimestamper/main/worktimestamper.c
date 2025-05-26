@@ -203,9 +203,34 @@ static void waitForTime() {
         localtime_r(&now, &timeInfo);
     }
 
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "Time: %02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
-    sendTextAtSecondLine(buffer);
+    char buffer[6];
+    snprintf(buffer, sizeof(buffer), "%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+    sendCommand(LCD_CLEAR_DISPLAY);
+    sendTextAtStart(buffer);
+}
+
+void updateDisplayWithTime(int *lastMinute) {
+    time_t now;
+    struct tm timeInfo;
+
+    time(&now);
+    localtime_r(&now, &timeInfo);
+
+    if (*lastMinute != timeInfo.tm_min) {
+        *lastMinute = timeInfo.tm_min;
+
+        char buffer[6];
+        snprintf(buffer, sizeof(buffer), "%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+        sendTextAtStart(buffer);
+    }
+}
+
+static void disconnectWIFI() {
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    sendTextAtSecondLine("WIFI stopped    ");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    sendTextAtSecondLine("                ");
 }
 
 // TODO: better command functions (each simple part as define and then with & combine them)
@@ -224,6 +249,7 @@ void app_main(void) {
     esp_netif_ip_info_t ip_info;
     bool connected = false;
     bool timeSynced = false;
+    int lastMinute = -1;
 
     // ReSharper disable once CppDFAEndlessLoop
     while (true) {
@@ -238,9 +264,14 @@ void app_main(void) {
             initTimeSync();
             timeSynced = true;
             waitForTime();
+            disconnectWIFI();
+        }
+
+        if (timeSynced) {
+            updateDisplayWithTime(&lastMinute);
         }
 
         controlBuildInLED();
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
