@@ -1,8 +1,16 @@
+#include <nvs_flash.h>
+#include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <driver/gpio.h>
+#include <lwip/apps/sntp.h>
 
 #include "rom/ets_sys.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+#include "esp_wifi.h"
+#include "credentials.h"
 
 // EPS32-API: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/index.html
 // ESP32-Datasheet: https://m.media-amazon.com/images/I/A1oyy-n8xfL.pdf
@@ -30,7 +38,7 @@
 #define LCD_CURSOR_START   0x02
 #define LCD_ENTRY_MODE_CURSOR_TO_RIGHT_NO_SCROLL    0x06
 #define LCD_4_BIT_2_LINES_5x7_FONT 0x28
-#define LCD_DISPLAY_ON_CURSOR_ON_BLINK_ON 0x0F
+#define LCD_DISPLAY_ON_CURSOR_OFF_BLINK_OFF 0x0C
 #define LCD_CURSOR_NEXT_LINE 0xC0
 
 
@@ -89,7 +97,7 @@ static void initDisplay() {
     set4BitMode();
 
     sendCommand(LCD_4_BIT_2_LINES_5x7_FONT);
-    sendCommand(LCD_DISPLAY_ON_CURSOR_ON_BLINK_ON);
+    sendCommand(LCD_DISPLAY_ON_CURSOR_OFF_BLINK_OFF);
     sendCommand(LCD_CLEAR_DISPLAY);
     sendCommand(LCD_CURSOR_START);
     sendCommand(LCD_ENTRY_MODE_CURSOR_TO_RIGHT_NO_SCROLL);
@@ -146,6 +154,60 @@ static void sendMultiText(const char *text, const char *secondText) {
     sendTextAtSecondLine(secondText);
 }
 
+static void initWIFI() {
+    sendCommand(LCD_CLEAR_DISPLAY);
+    sendTextAtStart("Init WIFI...    ");
+
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    const wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = WIFI_SSID,
+            .password = WIFI_PASS
+        }
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_connect());
+
+    sendTextAtSecondLine("        ...done!");
+    ets_delay_us(2 * 1000 * 1000); // wait 2 seconds
+}
+
+static void initTimeSync() {
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1); // Central Europe
+}
+
+static void waitForTime() {
+    sendCommand(LCD_CLEAR_DISPLAY);
+    sendTextAtStart("Sync time...    ");
+
+    time_t now = 0;
+    struct tm timeInfo = {0};
+
+    while (timeInfo.tm_year < 2020 - 1900) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        time(&now);
+        localtime_r(&now, &timeInfo);
+    }
+
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "Time: %02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+    sendTextAtSecondLine(buffer);
+}
+
 // TODO: better command functions (each simple part as define and then with & combine them)
 void app_main(void) {
     ets_delay_us(20000);
@@ -156,12 +218,29 @@ void app_main(void) {
     gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
 
     initDisplay();
+    initWIFI();
+    sendMultiText("Connect WIFI... ", "...please wait. ");
 
-    sendMultiText("Hello friend!", "Controller ready");
+    esp_netif_ip_info_t ip_info;
+    bool connected = false;
+    bool timeSynced = false;
 
     // ReSharper disable once CppDFAEndlessLoop
-    while (1) {
+    while (true) {
+        if (!connected
+            && esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip_info) == ESP_OK
+            && ip_info.ip.addr != 0) {
+            sendTextAtSecondLine("Connected!      ");
+            connected = true;
+        }
+
+        if (connected && !timeSynced) {
+            initTimeSync();
+            timeSynced = true;
+            waitForTime();
+        }
+
         controlBuildInLED();
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
