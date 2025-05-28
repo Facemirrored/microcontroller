@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <driver/gpio.h>
 
-#define GPIO_BUTTON_1 GPIO_NUM_14
-#define GPIO_BUTTON_2 GPIO_NUM_27
+#define GPIO_BUTTON_1 GPIO_NUM_5
+#define GPIO_BUTTON_2 GPIO_NUM_18
 
 static button_callback_t button1_callback = NULL;
 static button_callback_t button2_callback = NULL;
