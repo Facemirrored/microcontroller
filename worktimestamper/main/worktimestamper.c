@@ -1,9 +1,10 @@
+#include <esp_log.h>
+
+#include "buttonisrhandler.h"
+#include "credentials.h"
 #include <nvs_flash.h>
 #include <string.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
 #include <driver/gpio.h>
 #include <lwip/apps/sntp.h>
 
@@ -11,7 +12,6 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
-#include "credentials.h"
 
 // EPS32-API: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/index.html
 // ESP32-Datasheet: https://m.media-amazon.com/images/I/A1oyy-n8xfL.pdf
@@ -26,10 +26,6 @@
 // LCD control
 #define GPIO_LCD_RS GPIO_NUM_26 // 1 = write data, 0 = write commands
 #define GPIO_LCD_E  GPIO_NUM_25 // Enable signal - need a HIGH -> LOW flank (1us) for the LCD to take the written data
-
-// Buttons
-#define GPIO_BUTTON_1 GPIO_NUM_14
-#define GPIO_BUTTON_2 GPIO_NUM_27
 
 // Build int LED
 #define GPIO_LED GPIO_NUM_2
@@ -103,64 +99,7 @@ static void initDisplay() {
     sendCommand(LCD_ENTRY_MODE_CURSOR_TO_RIGHT_NO_SCROLL);
 }
 
-static QueueHandle_t button_isr_queue = NULL;
-
-static void IRAM_ATTR changeBuildInLEDHandler(void *arg) {
-    const uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(button_isr_queue, &gpio_num, NULL);
-}
-
-static void button_task() {
-    uint32_t io_num; // save the pressed GPIO number
-
-    // ReSharper disable once CppDFAEndlessLoop
-    while (1) {
-        if (xQueueReceive(button_isr_queue, &io_num, portMAX_DELAY)) {
-            if (io_num == GPIO_BUTTON_1) {
-                gpio_set_level(GPIO_LED, 1);
-            }
-
-            if (io_num == GPIO_BUTTON_2) {
-                gpio_set_level(GPIO_LED, 0);
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(30)); // wait 50 ms for the debouncing the button press
-
-            // remove all queue entries, which could be added due to the debounce effect
-            void *dummy;
-            while (xQueueReceive(button_isr_queue, &dummy, 0)) {
-                // do nothing
-            }
-        }
-    }
-}
-
 static void configureGPIO() {
-    const gpio_config_t btn1_config = {
-        .intr_type = GPIO_INTR_POSEDGE,
-        .mode = GPIO_MODE_INPUT,
-        .pin_bit_mask = (1ULL << GPIO_BUTTON_1),
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-    };
-    gpio_config(&btn1_config);
-
-    const gpio_config_t btn2_config = {
-        .intr_type = GPIO_INTR_POSEDGE,
-        .mode = GPIO_MODE_INPUT,
-        .pin_bit_mask = (1ULL << GPIO_BUTTON_2),
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-    };
-    gpio_config(&btn2_config);
-
-    button_isr_queue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
-
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(GPIO_BUTTON_1, changeBuildInLEDHandler, (void *) GPIO_BUTTON_1);
-    gpio_isr_handler_add(GPIO_BUTTON_2, changeBuildInLEDHandler, (void *) GPIO_BUTTON_2);
-
     // LCD
     gpio_set_direction(GPIO_LCD_RS, GPIO_MODE_OUTPUT);
     gpio_set_direction(GPIO_LCD_E, GPIO_MODE_OUTPUT);
@@ -236,7 +175,7 @@ static void waitForTime() {
     struct tm timeInfo = {0};
 
     while (timeInfo.tm_year < 2020 - 1900) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        //vTaskDelay(pdMS_TO_TICKS(2000)); TODO: we need this but later in own file
         time(&now);
         localtime_r(&now, &timeInfo);
     }
@@ -267,48 +206,58 @@ static void disconnectWIFI() {
     esp_wifi_disconnect();
     esp_wifi_stop();
     sendTextAtSecondLine("WIFI stopped    ");
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    //vTaskDelay(pdMS_TO_TICKS(2000)); TODO: we need this but later in own file
     sendTextAtSecondLine("                ");
 }
 
-// TODO: better command functions (each simple part as define and then with & combine them)
+void on_button_1_pressed() {
+    gpio_set_level(GPIO_LED, 1);
+}
+
+void on_button_2_pressed() {
+    gpio_set_level(GPIO_LED, 0);
+}
+
 void app_main(void) {
-    ets_delay_us(20000);
+    gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
 
-    configureGPIO();
+    create_button_isr_handler(on_button_1_pressed, on_button_2_pressed);
+    init_button_isr_handler(2);
+    //
+    // configureGPIO();
+    //
+    // // just to see if buttons are working
+    // gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
+    //
+    // initDisplay();
+    // initWIFI();
+    // sendMultiText("Connect WIFI... ", "...please wait. ");
+    //
+    // esp_netif_ip_info_t ip_info;
+    // bool connected = false;
+    // bool timeSynced = false;
+    // int lastMinute = -1;
+    //
+    // // ReSharper disable once CppDFAEndlessLoop
+    // while (true) {
+    //     if (!connected
+    //         && esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip_info) == ESP_OK
+    //         && ip_info.ip.addr != 0) {
+    //         sendTextAtSecondLine("Connected!      ");
+    //         connected = true;
+    //     }
+    //
+    //     if (connected && !timeSynced) {
+    //         initTimeSync();
+    //         timeSynced = true;
+    //         waitForTime();
+    //         disconnectWIFI();
+    //     }
+    //
+    //     if (timeSynced) {
+    //         updateDisplayWithTime(&lastMinute);
+    //     }
 
-    // just to see if buttons are working
-    gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
-
-    initDisplay();
-    initWIFI();
-    sendMultiText("Connect WIFI... ", "...please wait. ");
-
-    esp_netif_ip_info_t ip_info;
-    bool connected = false;
-    bool timeSynced = false;
-    int lastMinute = -1;
-
-    // ReSharper disable once CppDFAEndlessLoop
-    while (true) {
-        if (!connected
-            && esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip_info) == ESP_OK
-            && ip_info.ip.addr != 0) {
-            sendTextAtSecondLine("Connected!      ");
-            connected = true;
-        }
-
-        if (connected && !timeSynced) {
-            initTimeSync();
-            timeSynced = true;
-            waitForTime();
-            disconnectWIFI();
-        }
-
-        if (timeSynced) {
-            updateDisplayWithTime(&lastMinute);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
+    // vTaskDelay(pdMS_TO_TICKS(20));
+    //}
 }
