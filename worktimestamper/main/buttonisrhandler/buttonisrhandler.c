@@ -40,7 +40,7 @@ static void button_task(void *arg) {
 
 static gpio_config_t create_config() {
     const gpio_config_t config = {
-        .intr_type = GPIO_INTR_POSEDGE,
+        .intr_type = GPIO_INTR_NEGEDGE,
         .mode = GPIO_MODE_INPUT,
         .pin_bit_mask = (1ULL << GPIO_BUTTON_1) | (1ULL << GPIO_BUTTON_2),
         .pull_down_en = GPIO_PULLDOWN_DISABLE,

@@ -1,6 +1,5 @@
-#include <esp_log.h>
-
 #include "buttonisrhandler/buttonisrhandler.h"
+#include "oledhandler/oledhandler.c"
 #include "credentials.h"
 #include <nvs_flash.h>
 #include <string.h>
@@ -219,6 +218,9 @@ void on_button_2_pressed() {
 }
 
 void app_main(void) {
+    oled_init();
+    ssd1306_send_text("Hello world!");
+
     gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
 
     create_button_isr_handler(on_button_1_pressed, on_button_2_pressed);
