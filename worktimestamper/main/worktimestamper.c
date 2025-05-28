@@ -219,7 +219,7 @@ void on_button_2_pressed() {
 
 void app_main(void) {
     oled_init();
-    ssd1306_send_text("Hello world!");
+    send_text("Hello world!");
 
     gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
 
