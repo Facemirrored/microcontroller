@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include <driver/gpio.h>
 #include <lwip/apps/sntp.h>
 
@@ -11,7 +12,6 @@
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include "credentials.h"
-#include "timetracker.h"
 
 // EPS32-API: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/index.html
 // ESP32-Datasheet: https://m.media-amazon.com/images/I/A1oyy-n8xfL.pdf
@@ -41,7 +41,6 @@
 #define LCD_4_BIT_2_LINES_5x7_FONT 0x28
 #define LCD_DISPLAY_ON_CURSOR_OFF_BLINK_OFF 0x0C
 #define LCD_CURSOR_NEXT_LINE 0xC0
-
 
 /**
  * Negative flank (1us) for the LCD to take the written data which needs to be set to the GPIOs before.
@@ -104,17 +103,63 @@ static void initDisplay() {
     sendCommand(LCD_ENTRY_MODE_CURSOR_TO_RIGHT_NO_SCROLL);
 }
 
-static bool buttonIsPressed(const int button) {
-    return gpio_get_level(button) == 0;
+static QueueHandle_t button_isr_queue = NULL;
+
+static void IRAM_ATTR changeBuildInLEDHandler(void *arg) {
+    const uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(button_isr_queue, &gpio_num, NULL);
+}
+
+static void button_task() {
+    uint32_t io_num; // save the pressed GPIO number
+
+    // ReSharper disable once CppDFAEndlessLoop
+    while (1) {
+        if (xQueueReceive(button_isr_queue, &io_num, portMAX_DELAY)) {
+            if (io_num == GPIO_BUTTON_1) {
+                gpio_set_level(GPIO_LED, 1);
+            }
+
+            if (io_num == GPIO_BUTTON_2) {
+                gpio_set_level(GPIO_LED, 0);
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(30)); // wait 50 ms for the debouncing the button press
+
+            // remove all queue entries, which could be added due to the debounce effect
+            void *dummy;
+            while (xQueueReceive(button_isr_queue, &dummy, 0)) {
+                // do nothing
+            }
+        }
+    }
 }
 
 static void configureGPIO() {
-    // button read mode with pullup resistor
-    gpio_set_direction(GPIO_BUTTON_1, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_BUTTON_1, GPIO_PULLUP_ONLY);
+    const gpio_config_t btn1_config = {
+        .intr_type = GPIO_INTR_POSEDGE,
+        .mode = GPIO_MODE_INPUT,
+        .pin_bit_mask = (1ULL << GPIO_BUTTON_1),
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&btn1_config);
 
-    gpio_set_direction(GPIO_BUTTON_2, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_BUTTON_2, GPIO_PULLUP_ONLY);
+    const gpio_config_t btn2_config = {
+        .intr_type = GPIO_INTR_POSEDGE,
+        .mode = GPIO_MODE_INPUT,
+        .pin_bit_mask = (1ULL << GPIO_BUTTON_2),
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&btn2_config);
+
+    button_isr_queue = xQueueCreate(10, sizeof(uint32_t));
+    xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
+
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(GPIO_BUTTON_1, changeBuildInLEDHandler, (void *) GPIO_BUTTON_1);
+    gpio_isr_handler_add(GPIO_BUTTON_2, changeBuildInLEDHandler, (void *) GPIO_BUTTON_2);
 
     // LCD
     gpio_set_direction(GPIO_LCD_RS, GPIO_MODE_OUTPUT);
@@ -123,14 +168,6 @@ static void configureGPIO() {
     gpio_set_direction(GPIO_LCD_D5, GPIO_MODE_OUTPUT);
     gpio_set_direction(GPIO_LCD_D6, GPIO_MODE_OUTPUT);
     gpio_set_direction(GPIO_LCD_D7, GPIO_MODE_OUTPUT);
-}
-
-static void controlBuildInLED() {
-    if (buttonIsPressed(GPIO_BUTTON_1) || buttonIsPressed(GPIO_BUTTON_2)) {
-        gpio_set_level(GPIO_NUM_2, 1);
-    } else {
-        gpio_set_level(GPIO_NUM_2, 0);
-    }
 }
 
 static void sendTextAtCurrentPosition(const char *text) {
@@ -272,7 +309,6 @@ void app_main(void) {
             updateDisplayWithTime(&lastMinute);
         }
 
-        controlBuildInLED();
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
