@@ -2,7 +2,6 @@
 #define BUTTONISRHANDLER_H
 
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 
 typedef void (*button_callback_t)(void);
 

@@ -104,6 +104,22 @@ static esp_err_t ssd1306_send_init_sequence(void) {
     );
 }
 
+static void clear_display() {
+    const uint8_t clear_data[1024] = {0};
+
+    uint8_t data_buf[1 + 1024];
+    data_buf[0] = 0x40;
+    memcpy(data_buf + 1, clear_data, 1024);
+
+    // 0x21 column address -> from column 0 (0x00) to column 127 (0x7F)
+    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x21, 0x00, 0x7F}, 4,
+                               pdMS_TO_TICKS(100));
+    // 0x22 page address (one page = 8 pixels) -> from page 0 (0x00) to page 7 (0x07)
+    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x22, 0x00, 0x07}, 4,
+                               pdMS_TO_TICKS(100));
+    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, data_buf, sizeof(data_buf), pdMS_TO_TICKS(1000));
+}
+
 void oled_init(void) {
     const i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
@@ -125,6 +141,7 @@ void oled_init(void) {
     ));
 
     ESP_ERROR_CHECK(ssd1306_send_init_sequence());
+    clear_display();
 }
 
 /**
@@ -140,22 +157,6 @@ void set_cursor(const uint8_t column, const uint8_t page) {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmds, sizeof(cmds), pdMS_TO_TICKS(1000));
 }
 
-static void clear_display() {
-    const uint8_t clear_data[1024] = {0};
-
-    uint8_t data_buf[1 + 1024];
-    data_buf[0] = COMMAND_CONTROL_BYTE;
-    memcpy(data_buf + 1, clear_data, 1024);
-
-    // 0x21 column address -> from column 0 (0x00) to column 127 (0x7F)
-    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x21, 0x00, 0x7F}, 4,
-                               pdMS_TO_TICKS(100));
-    // 0x22 page address (one page = 8 pixels) -> from page 0 (0x00) to page 7 (0x07)
-    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x22, 0x00, 0x07}, 4,
-                               pdMS_TO_TICKS(100));
-    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, data_buf, sizeof(data_buf), pdMS_TO_TICKS(1000));
-}
-
 void send_char(const char character) {
     const uint8_t *glyph = getFontData(character);
 
@@ -164,11 +165,11 @@ void send_char(const char character) {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, i2c_data, sizeof(i2c_data), pdMS_TO_TICKS(1000));
 }
 
-void send_text(const char *text) {
-    clear_display();
-    set_cursor(0, 0);
+void send_text(const char *text, const int column, const int page) {
+    set_cursor(column, page);
 
     for (int i = 0; text[i] != '\0'; i++) {
         send_char(text[i]);
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
