@@ -76,6 +76,8 @@
 // 0xAF: Display ON
 #define DISPLAY_ON_COMMAND 0xAF
 
+// TODO: oledhandler should work with a queue principle so text/graphical updates are done after FIFO concept
+
 static OledMode oled_mode = MODE_LINE_BY_LINE;
 static uint8_t current_page = 0;
 static uint8_t current_column = 0;
@@ -109,7 +111,7 @@ static esp_err_t ssd1306_send_init_sequence(void) {
     );
 }
 
-static void clear_display() {
+void clear_display() {
     const uint8_t clear_data[1024] = {0};
 
     uint8_t data_buf[1 + 1024];

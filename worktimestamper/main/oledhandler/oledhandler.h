@@ -12,7 +12,7 @@ void oled_init(void);
 
 void set_cursor(uint8_t column, uint8_t page);
 
-static void clear_display();
+void clear_display();
 
 void send_char(char character);
 

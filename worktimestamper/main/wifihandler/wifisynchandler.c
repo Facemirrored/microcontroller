@@ -1,3 +1,4 @@
+#include "systemeventhandler.h"
 #include "wifisynchandler.h"
 #include "credentials.h"
 #include "oledhandler.h"
@@ -17,7 +18,6 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 
-static EventGroupHandle_t wifi_event_group;
 static bool is_connected;
 static bool should_reconnect = true;
 
@@ -42,7 +42,7 @@ static void wifi_event_handler(
                 break;
             case WIFI_EVENT_STA_DISCONNECTED:
                 ESP_LOGW("WIFI", "Disconnected, should_reconnect=%d", should_reconnect);
-                xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+                clear_event_bit(EVENT_BIT_WIFI_CONNECTED);
                 if (should_reconnect) {
                     esp_wifi_connect();
                 }
@@ -52,7 +52,7 @@ static void wifi_event_handler(
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ESP_LOGI("WIFI", "Got IP");
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        set_event_bit(EVENT_BIT_WIFI_CONNECTED);
     }
 }
 
@@ -86,9 +86,7 @@ bool setup_wifi(int *retry_out) {
 
     int retry = 0;
     while (retry < 5) {
-        // wait max 10 seconds for WIFI_CONNECTED_BIT set
-        EventBits_t bits = xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT,
-                                               pdFALSE, pdTRUE, pdMS_TO_TICKS(20000));
+        EventBits_t bits = wait_for_state(EVENT_BIT_WIFI_CONNECTED);
         if (bits & WIFI_CONNECTED_BIT) {
             is_connected = true;
             break;
@@ -147,10 +145,10 @@ void wifi_sync_task(void *args) {
     disconnect_wifi();
     send_text(" WIFI disconnected");
     send_text(" Controller ready");
+    set_event_bit(EVENT_BIT_WIFI_HANDLER_DONE);
     vTaskDelete(NULL);
 }
 
 void init_wifi_sync_handler(const int priority) {
-    wifi_event_group = xEventGroupCreate();
-    xTaskCreate(wifi_sync_task, "wifi_sync_task", 8192, NULL, priority + 1, NULL);
+    xTaskCreate(wifi_sync_task, "wifi_sync_task", 8192, NULL, priority, NULL);
 }
