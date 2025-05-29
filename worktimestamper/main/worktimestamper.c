@@ -14,17 +14,6 @@
 // EPS32-API: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/index.html
 // ESP32-Datasheet: https://m.media-amazon.com/images/I/A1oyy-n8xfL.pdf
 
-// Build int LED
-#define GPIO_LED GPIO_NUM_2
-
-void on_button_1_pressed() {
-    gpio_set_level(GPIO_LED, 1);
-}
-
-void on_button_2_pressed() {
-    gpio_set_level(GPIO_LED, 0);
-}
-
 const char *reset_reason_str(const esp_reset_reason_t reason) {
     switch (reason) {
         case ESP_RST_POWERON: return "Power-On";
@@ -46,20 +35,7 @@ void app_main(void) {
     oled_init();
     send_text("Timestamper startup..");
 
-    gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
-
-    create_button_isr_handler(on_button_1_pressed, on_button_2_pressed);
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);
     init_timetracker_handler(1);
-    // print_time(get_current_time());
-    //
-    //
-    // int lastMinute = -1;
-    //
-    // // ReSharper disable once CppDFAEndlessLoop
-    // while (true) {
-    //     updateDisplayWithTime(&lastMinute);
-    //     vTaskDelay(pdMS_TO_TICKS(500));
-    // }
 }

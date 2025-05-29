@@ -10,6 +10,7 @@
 #include <portmacro.h>
 #include <stdio.h>
 #include <time.h>
+#include <driver/gpio.h>
 
 struct tm get_current_time() {
     time_t now;
@@ -39,6 +40,9 @@ void updateDisplayWithTime(uint8_t *lastMinute) {
     }
 }
 
+// Build in LED
+#define GPIO_LED GPIO_NUM_2
+
 void timetracker_task(void *args) {
     wait_for_state(EVENT_BIT_WIFI_HANDLER_DONE);
 
@@ -47,11 +51,17 @@ void timetracker_task(void *args) {
     send_text("-main program rdy");
     vTaskDelay(pdMS_TO_TICKS(1000));
     uint8_t lastMinute = 0;
+    gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
 
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
         updateDisplayWithTime(&lastMinute);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (event_bit_is_set(EVENT_BIT_BUTTON_1_PRESSED)) {
+            gpio_set_level(GPIO_LED, 1);
+        }
+        if (event_bit_is_set(EVENT_BIT_BUTTON_2_PRESSED)) {
+            gpio_set_level(GPIO_LED, 0);
+        }
     }
 }
 

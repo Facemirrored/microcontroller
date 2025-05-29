@@ -1,4 +1,5 @@
 #include "buttonisrhandler.h"
+#include "systemeventhandler.h"
 #include "freertos/task.h"
 #include <freertos/projdefs.h>
 #include <portmacro.h>
@@ -8,9 +9,6 @@
 #define GPIO_BUTTON_1 GPIO_NUM_5
 #define GPIO_BUTTON_2 GPIO_NUM_18
 
-static button_callback_t button1_callback = NULL;
-static button_callback_t button2_callback = NULL;
-
 static QueueHandle_t button_isr_queue = NULL;
 
 static void button_task(void *arg) {
@@ -19,12 +17,12 @@ static void button_task(void *arg) {
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
         if (xQueueReceive(button_isr_queue, &io_num, portMAX_DELAY)) {
-            if (io_num == GPIO_BUTTON_1 && button1_callback != NULL) {
-                button1_callback();
+            if (io_num == GPIO_BUTTON_1) {
+                set_event_bit(EVENT_BIT_BUTTON_1_PRESSED);
             }
 
-            if (io_num == GPIO_BUTTON_2 && button2_callback != NULL) {
-                button2_callback();
+            if (io_num == GPIO_BUTTON_2) {
+                set_event_bit(EVENT_BIT_BUTTON_2_PRESSED);
             }
 
             vTaskDelay(pdMS_TO_TICKS(30)); // wait 50 ms for the debouncing the button press
@@ -55,14 +53,11 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
     xQueueSendFromISR(button_isr_queue, &gpio_num, NULL);
 }
 
-void create_button_isr_handler(const button_callback_t callbackBtn1, const button_callback_t callbackBtn2) {
+void create_button_isr_handler() {
     if (button_isr_queue != NULL) {
         vQueueDelete(button_isr_queue);
         button_isr_queue = NULL;
     }
-
-    button1_callback = callbackBtn1;
-    button2_callback = callbackBtn2;
 
     const gpio_config_t button_config = create_config();
     gpio_config(&button_config);
@@ -75,5 +70,6 @@ void create_button_isr_handler(const button_callback_t callbackBtn1, const butto
 }
 
 void init_button_isr_handler(const int priority) {
+    create_button_isr_handler();
     xTaskCreate(button_task, "button_task", 2048, NULL, priority, NULL);
 }
