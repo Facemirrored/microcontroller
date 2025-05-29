@@ -76,6 +76,11 @@
 // 0xAF: Display ON
 #define DISPLAY_ON_COMMAND 0xAF
 
+static OledMode oled_mode = MODE_LINE_BY_LINE;
+static uint8_t current_page = 0;
+static uint8_t current_column = 0;
+static bool first_text = true;
+
 static const uint8_t init_sequence[] = {
     COMMAND_CONTROL_BYTE, DISPLAY_OFF_COMMAND,
     COMMAND_CONTROL_BYTE, DISPLAY_CLOCK_DIVIDE_RATIO_COMMAND, DISPLAY_CLOCK_DIVIDE_RATIO_ARG_DEFAULT,
@@ -118,6 +123,10 @@ static void clear_display() {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x22, 0x00, 0x07}, 4,
                                pdMS_TO_TICKS(100));
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, data_buf, sizeof(data_buf), pdMS_TO_TICKS(1000));
+
+    current_column = 0;
+    current_page = 0;
+    first_text = true;
 }
 
 void oled_init(void) {
@@ -144,17 +153,21 @@ void oled_init(void) {
     clear_display();
 }
 
-/**
- * Set the cursor to display Position.
- * @param column column from 0 to 127
- * @param page page (one page = 8 pixels)
- */
 void set_cursor(const uint8_t column, const uint8_t page) {
-    const uint8_t cmds[] = {
-        0x00, 0x21, column, 127,
-        0x00, 0x22, page, 7
+    // Column Address
+    const uint8_t cmd_col[] = {
+        COMMAND_CONTROL_BYTE, 0x21, column, column + 5
     };
-    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmds, sizeof(cmds), pdMS_TO_TICKS(1000));
+
+    // Page Address
+    const uint8_t cmd_page[] = {
+        COMMAND_CONTROL_BYTE, 0x22, page, page
+    };
+
+    ESP_ERROR_CHECK(
+        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_col, sizeof(cmd_col), pdMS_TO_TICKS(100)));
+    ESP_ERROR_CHECK(
+        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_page, sizeof(cmd_page), pdMS_TO_TICKS(100)));
 }
 
 void send_char(const char character) {
@@ -165,11 +178,55 @@ void send_char(const char character) {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, i2c_data, sizeof(i2c_data), pdMS_TO_TICKS(1000));
 }
 
-void send_text(const char *text, const int column, const int page) {
-    set_cursor(column, page);
+void set_mode_and_reset(const OledMode mode) {
+    oled_mode = mode;
+    clear_display();
+    current_column = 0;
+    current_page = 0;
+}
+
+#define MAX_COLUMNS 21
+#define MAX_PAGES   8
+
+void set_cursor_text_col(const uint8_t text_col, const uint8_t page) {
+    const uint8_t pixel_col = text_col * 6;
+    printf("Setting cursor to pixel_col = %d, page = %d\n", pixel_col, page);
+    set_cursor(pixel_col, page);
+}
+
+void send_text(const char *text) {
+    if (oled_mode == MODE_LINE_BY_LINE) {
+        current_column = 0;
+
+        if (!first_text) {
+            current_page++;
+        }
+        if (current_page >= MAX_PAGES) {
+            current_page = 0;
+        }
+    }
 
     for (int i = 0; text[i] != '\0'; i++) {
+        set_cursor_text_col(current_column, current_page);
         send_char(text[i]);
+
+        current_column++;
+        if (current_column >= MAX_COLUMNS) {
+            current_column = 0;
+            current_page++;
+            if (current_page >= MAX_PAGES) {
+                current_page = 0;
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(50));
     }
+
+    first_text = false;
+}
+
+void send_text_at(const char *text, const uint8_t column, const uint8_t page) {
+    current_column = column;
+    current_page = page;
+    send_text(text);
 }

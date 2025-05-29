@@ -22,11 +22,11 @@ static bool is_connected;
 static bool should_reconnect = true;
 
 void wifi_log_status(const char *prefix, const bool connected, const int retry_count) {
-    send_text("                              ", 0, 2);
+    send_text_at("                              ", 0, 2);
     char status_msg[32];
-    snprintf(status_msg, sizeof(status_msg), "%s %s (%d)",
+    snprintf(status_msg, sizeof(status_msg), "%s %s %d",
              prefix, connected ? "connected" : "disconnected", retry_count);
-    send_text(status_msg, 0, 2);
+    send_text_at(status_msg, 0, 2);
 }
 
 static void wifi_event_handler(
@@ -88,7 +88,7 @@ bool setup_wifi(int *retry_out) {
     while (retry < 5) {
         // wait max 10 seconds for WIFI_CONNECTED_BIT set
         EventBits_t bits = xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT,
-                                               pdFALSE, pdTRUE, pdMS_TO_TICKS(10000));
+                                               pdFALSE, pdTRUE, pdMS_TO_TICKS(20000));
         if (bits & WIFI_CONNECTED_BIT) {
             is_connected = true;
             break;
@@ -129,24 +129,24 @@ static void waitForTime() {
     }
 
     char buffer[50];
-    snprintf(buffer, sizeof(buffer), "TIME: %02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
-    send_text(buffer, 0, 4);
+    snprintf(buffer, sizeof(buffer), " clock: %02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
+    send_text(buffer);
 }
 
 void wifi_sync_task(void *args) {
-    send_text("Start WIFI sync task..", 0, 1);
+    send_text(" start WIFI task");
     if (!is_connected) {
         int retries = 0;
         const bool success = setup_wifi(&retries);
-        wifi_log_status("WIFI", success, retries);
+        wifi_log_status(" WIFI", success, retries);
     }
 
-    send_text("Initialize time sync..", 0, 3);
+    send_text(" init time sync");
     initTimeSync();
     waitForTime();
     disconnect_wifi();
-    send_text("WIFI disconnected...", 0, 5);
-    send_text("Controller ready!", 0, 6);
+    send_text(" WIFI disconnected");
+    send_text(" Controller ready");
     vTaskDelete(NULL);
 }
 

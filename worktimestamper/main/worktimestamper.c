@@ -3,7 +3,6 @@
 #include "buttonisrhandler/buttonisrhandler.h"
 #include "oledhandler/oledhandler.c"
 #include "wifihandler/wifisynchandler.h"
-#include <nvs_flash.h>
 #include <string.h>
 
 #include <driver/gpio.h>
@@ -33,7 +32,7 @@ void print_time(const struct tm time_info) {
 
     char buffer[50];
     snprintf(buffer, sizeof(buffer), "Clock: %02d:%02d", time_info.tm_hour, time_info.tm_min);
-    send_text(buffer, 0, 0);
+    send_text(buffer);
 }
 
 void updateDisplayWithTime(int *lastMinute) {
@@ -71,7 +70,7 @@ void app_main(void) {
     ESP_LOGI("BOOT", "Reset Reason: %s", reset_reason_str(reason));
 
     oled_init();
-    send_text("Timestamper startup...", 0, 0);
+    send_text("Timestamper startup..");
 
     gpio_set_direction(GPIO_LED, GPIO_MODE_OUTPUT);
 
@@ -80,14 +79,14 @@ void app_main(void) {
     init_wifi_sync_handler(1);
     vTaskDelay(pdTICKS_TO_MS(2000));
 
-    print_time(get_current_time());
-
-
-    int lastMinute = -1;
-
-    // ReSharper disable once CppDFAEndlessLoop
-    while (true) {
-        updateDisplayWithTime(&lastMinute);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    // print_time(get_current_time());
+    //
+    //
+    // int lastMinute = -1;
+    //
+    // // ReSharper disable once CppDFAEndlessLoop
+    // while (true) {
+    //     updateDisplayWithTime(&lastMinute);
+    //     vTaskDelay(pdMS_TO_TICKS(500));
+    // }
 }
