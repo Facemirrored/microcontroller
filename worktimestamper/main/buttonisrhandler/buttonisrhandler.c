@@ -11,24 +11,36 @@
 
 static QueueHandle_t button_isr_queue = NULL;
 
-static void button_task(void *arg) {
+static void button_task() {
     uint32_t io_num; // save the pressed GPIO number
+    static bool btn1_pressed = false;
+    static bool btn2_pressed = false;
 
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
         if (xQueueReceive(button_isr_queue, &io_num, portMAX_DELAY)) {
+            const bool is_pressed = gpio_get_level(io_num) == 0;
+
             if (io_num == GPIO_BUTTON_1) {
-                set_event_bit(EVENT_BIT_BUTTON_1_PRESSED);
+                if (is_pressed && !btn1_pressed) {
+                    set_event_bit_isr(EVENT_BIT_BUTTON_1_PRESSED);
+                } else if (!is_pressed) {
+                    btn1_pressed = false;
+                }
             }
 
             if (io_num == GPIO_BUTTON_2) {
-                set_event_bit(EVENT_BIT_BUTTON_2_PRESSED);
+                if (is_pressed && !btn2_pressed) {
+                    set_event_bit_isr(EVENT_BIT_BUTTON_2_PRESSED);
+                } else if (!is_pressed) {
+                    btn2_pressed = false;
+                }
             }
 
             vTaskDelay(pdMS_TO_TICKS(30)); // wait 50 ms for the debouncing the button press
 
             // remove all queue entries, which could be added due to the debounced effect
-            void *dummy;
+            uint32_t *dummy;
             while (xQueueReceive(button_isr_queue, &dummy, 0)) {
                 // do nothing
             }

@@ -41,7 +41,6 @@ static void wifi_event_handler(
                 break;
             case WIFI_EVENT_STA_DISCONNECTED:
                 ESP_LOGW("WIFI", "Disconnected, should_reconnect=%d", should_reconnect);
-                clear_event_bit(EVENT_BIT_WIFI_CONNECTED);
                 if (should_reconnect) {
                     esp_wifi_connect();
                 }
@@ -68,7 +67,7 @@ bool setup_wifi(int *retry_out) {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
-    // register event handler for listening to IP_EVENT_STA_GOT_IP event from WI-FI stack
+    // register the event handler for listening to IP_EVENT_STA_GOT_IP event from WI-FI stack
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL);
 
@@ -85,8 +84,7 @@ bool setup_wifi(int *retry_out) {
 
     int retry = 0;
     while (retry < 5) {
-        EventBits_t bits = wait_for_state(EVENT_BIT_WIFI_CONNECTED);
-        if (bits & WIFI_CONNECTED_BIT) {
+        if (wait_for_state(EVENT_BIT_WIFI_CONNECTED)) {
             is_connected = true;
             break;
         }

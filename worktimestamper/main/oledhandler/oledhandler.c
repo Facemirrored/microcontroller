@@ -139,7 +139,7 @@ void send_text(const char *text) {
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 
     first_text = false;
