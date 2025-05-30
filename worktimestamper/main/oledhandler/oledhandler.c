@@ -173,3 +173,19 @@ void send_text_at_once(const char *text, const uint8_t column, const uint8_t pag
     current_column = temp_col;
     current_page = temp_page;
 }
+
+void send_page_20x8(const char *full_text_page[]) {
+    if (full_text_page == NULL) return;
+
+    clear_display();
+
+    char line[21];
+
+    for (int i = 0; i < 8; i++) {
+        if (full_text_page[i] == NULL) return;
+
+        strncpy(line, full_text_page[i], 20);
+        line[20] = '\0';
+        send_text(line);
+    }
+}

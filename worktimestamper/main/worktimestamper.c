@@ -32,6 +32,7 @@ void app_main(void) {
     init_system_event_group();
 
     oled_init();
+
     send_text("-Timestamper startup-");
 
     init_button_isr_handler(3);

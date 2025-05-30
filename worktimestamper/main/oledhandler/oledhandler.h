@@ -22,4 +22,6 @@ void send_text_at(const char *text, uint8_t column, uint8_t page);
 
 void send_text_at_once(const char *text, uint8_t column, uint8_t page);
 
+void send_page_20x8(char *full_text_page[]);
+
 #endif
