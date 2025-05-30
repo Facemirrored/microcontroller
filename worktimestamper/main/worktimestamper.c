@@ -7,7 +7,6 @@
 #include "timetracker.h"
 
 #include <string.h>
-#include <driver/gpio.h>
 #include <lwip/apps/sntp.h>
 #include "rom/ets_sys.h"
 
@@ -33,7 +32,7 @@ void app_main(void) {
     init_system_event_group();
 
     oled_init();
-    send_text("Timestamper startup..");
+    send_text("-Timestamper startup-");
 
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);

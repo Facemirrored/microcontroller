@@ -18,6 +18,8 @@ void send_char(char character);
 
 void send_text(const char *text);
 
-void send_text_at(const char *text, const uint8_t column, const uint8_t page);
+void send_text_at(const char *text, uint8_t column, uint8_t page);
+
+void send_text_at_once(const char *text, uint8_t column, uint8_t page);
 
 #endif

@@ -22,11 +22,10 @@ static bool is_connected;
 static bool should_reconnect = true;
 
 void wifi_log_status(const char *prefix, const bool connected, const int retry_count) {
-    send_text_at("                              ", 0, 2);
     char status_msg[32];
     snprintf(status_msg, sizeof(status_msg), "%s %s %d",
              prefix, connected ? "connected" : "disconnected", retry_count);
-    send_text_at(status_msg, 0, 2);
+    send_text(status_msg);
 }
 
 static void wifi_event_handler(
