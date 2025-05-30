@@ -139,7 +139,7 @@ void send_text(const char *text) {
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     first_text = false;
@@ -174,10 +174,12 @@ void send_text_at_once(const char *text, const uint8_t column, const uint8_t pag
     current_page = temp_page;
 }
 
-void send_page_20x8(const char *full_text_page[]) {
+void send_page_20x8_no_clear(const char *full_text_page[]) {
     if (full_text_page == NULL) return;
 
-    clear_display();
+    current_column = 0;
+    current_page = 0;
+    first_text = true;
 
     char line[21];
 
@@ -188,4 +190,11 @@ void send_page_20x8(const char *full_text_page[]) {
         line[20] = '\0';
         send_text(line);
     }
+}
+
+void send_page_20x8(const char *full_text_page[]) {
+    if (full_text_page == NULL) return;
+
+    clear_display();
+    send_page_20x8_no_clear(full_text_page);
 }

@@ -36,8 +36,6 @@ struct tm get_current_time() {
 }
 
 void print_time(const struct tm time_info, const bool with_seconds, const uint8_t column, const uint8_t page) {
-    clear_display();
-
     char buffer[50];
     if (with_seconds) {
         snprintf(buffer, sizeof(buffer),
@@ -48,7 +46,7 @@ void print_time(const struct tm time_info, const bool with_seconds, const uint8_
     } else {
         snprintf(buffer, sizeof(buffer), "clock: %02d:%02d", time_info.tm_hour, time_info.tm_min);
     }
-    send_text_at_once(buffer, column, page);
+    send_text_at(buffer, column, page);
 }
 
 void update_display_with_current_time() {
@@ -82,8 +80,39 @@ void tutorial() {
     vTaskDelay(pdMS_TO_TICKS(500));
 }
 
-void update_full_display() {
-    send_text("BTN Pressed");
+void update_display() {
+    const struct tm time_info = get_current_time();
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "clock: %02d:%02d", time_info.tm_hour, time_info.tm_min);
+
+    const char *working_text = is_working ? "You are working!    " : "You are not working!";
+    if (show_stamps) {
+        const char *show_stamps_page[] = {
+            buffer,
+            "                    ",
+            working_text,
+            "show stamps",
+            "show stamps",
+            "show stamps",
+            "show stamps",
+            "show stamps",
+        };
+        send_page_20x8_no_clear(show_stamps_page);
+    } else {
+        char session[20];
+        snprintf(session, sizeof(session), "sessions: %02d      ", current_session_index);
+        const char *show_work_page[] = {
+            buffer,
+            "                    ",
+            working_text,
+            session,
+            "                    ",
+            "                    ",
+            "                    ",
+            "                    ",
+        };
+        send_page_20x8_no_clear(show_work_page);
+    }
 }
 
 void display_mode_task() {
@@ -91,7 +120,7 @@ void display_mode_task() {
     while (1) {
         wait_for_state(EVENT_BIT_BUTTON_2_PRESSED);
         show_stamps = !show_stamps;
-        set_event_bit(EVENT_BIT_TIMETRACKER_BUTTON_INTERACTION);
+        set_event_bit(EVENT_BIT_UPDATE_DISPLAY);
     }
 }
 
@@ -109,7 +138,7 @@ void stamp_task() {
             is_working = true;
         }
 
-        set_event_bit(EVENT_BIT_TIMETRACKER_BUTTON_INTERACTION);
+        set_event_bit(EVENT_BIT_UPDATE_DISPLAY);
     }
 }
 
@@ -123,15 +152,22 @@ void timetracker_task(void *args) {
 
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
-        if (event_bit_is_set(EVENT_BIT_TIMETRACKER_BUTTON_INTERACTION)) {
-            update_full_display();
-        } else {
-            update_display_with_current_time();
-            vTaskDelay(pdMS_TO_TICKS(50));
-        }
+        wait_for_state(EVENT_BIT_UPDATE_DISPLAY);
+        update_display();
+    }
+}
+
+void update_time_task() {
+    update_display_with_current_time();
+
+    // ReSharper disable once CppDFAEndlessLoop
+    while (1) {
+        update_display_with_current_time();
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 void init_timetracker_handler(const uint8_t priority) {
-    xTaskCreate(timetracker_task, "timetracker_task", 4096, (void *) (uintptr_t) priority, priority, NULL);
+    xTaskCreate(update_time_task, "update_time_task", 4096, NULL, priority, NULL);
+    xTaskCreate(timetracker_task, "timetracker_task", 4096, (void *) (uintptr_t) priority + 1, priority + 1, NULL);
 }
