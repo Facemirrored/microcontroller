@@ -33,7 +33,7 @@ void app_main(void) {
 
     oled_init();
 
-    send_text("-Timestamper startup-");
+    send_text(" Timestamper start  ");
 
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);

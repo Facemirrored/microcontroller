@@ -114,7 +114,7 @@ void set_cursor_text_col(const uint8_t text_col, const uint8_t page) {
     set_cursor(pixel_col, page);
 }
 
-void send_text(const char *text) {
+void send_text_with_delay(const char *text, const int8_t delay_ms) {
     if (oled_mode == MODE_LINE_BY_LINE) {
         current_column = 0;
 
@@ -139,10 +139,14 @@ void send_text(const char *text) {
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }
 
     first_text = false;
+}
+
+void send_text(const char *text) {
+    send_text_with_delay(text, 20);
 }
 
 /**
@@ -174,7 +178,7 @@ void send_text_at_once(const char *text, const uint8_t column, const uint8_t pag
     current_page = temp_page;
 }
 
-void send_page_20x8_no_clear(const char *full_text_page[]) {
+void send_page_20x8_no_clear_with_delay(const char *full_text_page[], const uint8_t delay) {
     if (full_text_page == NULL) return;
 
     current_column = 0;
@@ -188,13 +192,21 @@ void send_page_20x8_no_clear(const char *full_text_page[]) {
 
         strncpy(line, full_text_page[i], 20);
         line[20] = '\0';
-        send_text(line);
+        send_text_with_delay(line, delay);
     }
 }
 
-void send_page_20x8(const char *full_text_page[]) {
+void send_page_20x8_no_clear(const char *full_text_page[]) {
+    send_page_20x8_no_clear_with_delay(full_text_page, 20);
+}
+
+void send_page_20x8_with_delay(const char *full_text_page[], const uint8_t delay) {
     if (full_text_page == NULL) return;
 
     clear_display();
-    send_page_20x8_no_clear(full_text_page);
+    send_page_20x8_no_clear_with_delay(full_text_page, delay);
+}
+
+void send_page_20x8(const char *full_text_page[]) {
+    send_page_20x8_with_delay(full_text_page, 20);
 }
