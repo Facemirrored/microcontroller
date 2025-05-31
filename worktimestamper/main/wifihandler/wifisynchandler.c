@@ -158,6 +158,6 @@ void wifi_sync_task(void *args) {
 }
 
 void init_wifi_sync_handler(const int priority) {
-    clear_display_and_queue();
+    clear_display();
     xTaskCreate(wifi_sync_task, "wifi_sync_task", 8192, NULL, priority, NULL);
 }

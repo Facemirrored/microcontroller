@@ -83,7 +83,7 @@ void update_timers() {
 }
 
 void tutorial() {
-    clear_display_and_queue();
+    clear_display();
 
     const char *tutorial_page[] = {
         "----time synched----",
@@ -98,7 +98,7 @@ void tutorial() {
     //send_page_20x8(tutorial_page);
 
     wait_for_state(EVENT_BIT_BUTTON_1_PRESSED);
-    clear_display_and_queue();
+    clear_display();
     get_current_time();
     vTaskDelay(pdMS_TO_TICKS(500));
 }

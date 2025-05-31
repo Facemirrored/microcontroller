@@ -31,7 +31,7 @@ static esp_err_t ssd1306_send_init_sequence(void) {
     );
 }
 
-void clear_display_and_queue() {
+void clear_display() {
     const uint8_t clear_data[1024] = {0};
 
     uint8_t data_buf[1 + 1024];
@@ -165,7 +165,7 @@ void init_oled(void) {
     high_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
     normal_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
 
-    clear_display_and_queue();
+    clear_display();
 
     xTaskCreate(display_task, "display_task", 4096, NULL, 1, NULL);
 }

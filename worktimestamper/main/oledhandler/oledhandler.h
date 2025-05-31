@@ -11,9 +11,11 @@ typedef struct {
 
 void init_oled(void);
 
+void send_pixel(uint8_t column, uint8_t page, uint8_t pixel_bit);
+
 void set_cursor(uint8_t column, uint8_t row);
 
-void clear_display_and_queue();
+void clear_display();
 
 void send_text_at(const char *text, uint8_t column, uint8_t row);
 
