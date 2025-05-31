@@ -30,12 +30,11 @@ void app_main(void) {
     ESP_LOGI("BOOT", "Reset Reason: %s", reset_reason_str(reason));
 
     init_system_event_group();
+    init_oled();
 
-    oled_init();
-
-    send_text(" Timestamper start  ");
+    // TODO: cool startup screen ^^
 
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);
-    init_timetracker_handler(1);
+    //init_timetracker_handler(1);
 }

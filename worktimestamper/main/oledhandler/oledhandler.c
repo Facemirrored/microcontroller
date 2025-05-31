@@ -2,8 +2,8 @@
 #include "font5x7.h"
 #include "commands.h"
 
+#include "esp_log.h"
 #include <string.h>
-
 #include "driver/i2c.h"
 
 // https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
@@ -15,10 +15,12 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
-static OledMode oled_mode = MODE_LINE_BY_LINE;
-static uint8_t current_page = 0;
-static uint8_t current_column = 0;
-static bool first_text = true;
+#define MSG_QUEUE_LEN 20
+#define DISPLAY_CACHE_SIZE 20
+#define MAX_HIGH_PRIO_PER_CYCLE 3
+
+QueueHandle_t high_priority_queue;
+QueueHandle_t normal_priority_queue;
 
 static esp_err_t ssd1306_send_init_sequence(void) {
     return i2c_master_write_to_device(I2C_MASTER_NUM,
@@ -29,7 +31,7 @@ static esp_err_t ssd1306_send_init_sequence(void) {
     );
 }
 
-void clear_display() {
+void clear_display_and_queue() {
     const uint8_t clear_data[1024] = {0};
 
     uint8_t data_buf[1 + 1024];
@@ -43,13 +45,102 @@ void clear_display() {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, (uint8_t[]){COMMAND_CONTROL_BYTE, 0x22, 0x00, 0x07}, 4,
                                pdMS_TO_TICKS(100));
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, data_buf, sizeof(data_buf), pdMS_TO_TICKS(1000));
-
-    current_column = 0;
-    current_page = 0;
-    first_text = true;
 }
 
-void oled_init(void) {
+void set_cursor(const uint8_t column, const uint8_t row) {
+    const uint8_t pixel_start = column * 6;
+
+    // Column Address
+    const uint8_t cmd_col[] = {
+        COMMAND_CONTROL_BYTE, 0x21, pixel_start, pixel_start + 5
+    };
+
+    // Page Address
+    const uint8_t cmd_page[] = {
+        COMMAND_CONTROL_BYTE, 0x22, row, row
+    };
+
+    ESP_ERROR_CHECK(
+        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_col, sizeof(cmd_col), pdMS_TO_TICKS(100)));
+    ESP_ERROR_CHECK(
+        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_page, sizeof(cmd_page), pdMS_TO_TICKS(100)));
+}
+
+void send_char(const char character) {
+    ESP_LOGI("PRINT CHAR", "%c", character);
+
+    const uint8_t *glyph = getFontData(character);
+
+    // write glyph with data control byte (0x40) at the beginning and space at the ending
+    const uint8_t i2c_data[7] = {0x40, glyph[0], glyph[1], glyph[2], glyph[3], glyph[4], 0x00};
+    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, i2c_data, sizeof(i2c_data), pdMS_TO_TICKS(1000));
+}
+
+TextMessage_t create_display_message(const char *text, const uint8_t column, const uint8_t row) {
+    TextMessage_t msg = {
+        .column = column,
+        .row = row,
+    };
+
+    strncpy(msg.text, text, sizeof(msg.text) - 1);
+    msg.text[sizeof(msg.text) - 1] = '\0';
+
+    ESP_LOGI("NEW DISPLAY TEXT", "%s", msg.text);
+
+    return msg;
+}
+
+void send_text_at(const char *text, const uint8_t column, const uint8_t row) {
+    const TextMessage_t message = create_display_message(text, column, row);
+    xQueueSend(normal_priority_queue, &message, 0);
+}
+
+void send_text_at_row(const char *text, const uint8_t row) {
+    send_text_at(text, 0, row);
+}
+
+void send_high_prio_text_at(const char *text, const uint8_t column, const uint8_t row) {
+    const TextMessage_t message = create_display_message(text, column, row);
+    xQueueSend(high_priority_queue, &message, 0);
+}
+
+void send_high_prio_text_at_row(const char *text, const uint8_t row) {
+    send_high_prio_text_at(text, 0, row);
+}
+
+void process_display_message(const TextMessage_t *message) {
+    set_cursor(message->column, message->row);
+
+    ESP_LOGI("PRINT MESSAGE", "%s", message->text);
+
+    for (int i = 0; message->text[i] != '\0'; i++) {
+        set_cursor(message->column + i, message->row);
+        send_char(message->text[i]);
+    }
+}
+
+void display_task() {
+    TextMessage_t message;
+    uint8_t priority_counter = 0;
+
+    // ReSharper disable once CppDFAEndlessLoop
+    for (;;) {
+        // first, we always will send the high-priority messages (by 3 times)
+        while (priority_counter < MAX_HIGH_PRIO_PER_CYCLE
+               && xQueueReceive(high_priority_queue, &message, 0) == pdPASS) {
+            process_display_message(&message);
+            priority_counter++;
+        }
+
+        // then we will send normal-priority messages (reset counter for prio another queue again)
+        if (xQueueReceive(normal_priority_queue, &message, 0) == pdPASS) {
+            process_display_message(&message);
+            priority_counter = 0;
+        }
+    }
+}
+
+void init_oled(void) {
     const i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = I2C_MASTER_SDA_IO,
@@ -70,143 +161,11 @@ void oled_init(void) {
     ));
 
     ESP_ERROR_CHECK(ssd1306_send_init_sequence());
-    clear_display();
-}
 
-void set_cursor(const uint8_t column, const uint8_t page) {
-    // Column Address
-    const uint8_t cmd_col[] = {
-        COMMAND_CONTROL_BYTE, 0x21, column, column + 5
-    };
+    high_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
+    normal_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
 
-    // Page Address
-    const uint8_t cmd_page[] = {
-        COMMAND_CONTROL_BYTE, 0x22, page, page
-    };
+    clear_display_and_queue();
 
-    ESP_ERROR_CHECK(
-        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_col, sizeof(cmd_col), pdMS_TO_TICKS(100)));
-    ESP_ERROR_CHECK(
-        i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, cmd_page, sizeof(cmd_page), pdMS_TO_TICKS(100)));
-}
-
-void send_char(const char character) {
-    const uint8_t *glyph = getFontData(character);
-
-    // write glyph with data control byte (0x40) at beginning and space at ending
-    const uint8_t i2c_data[7] = {0x40, glyph[0], glyph[1], glyph[2], glyph[3], glyph[4], 0x00};
-    i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, i2c_data, sizeof(i2c_data), pdMS_TO_TICKS(1000));
-}
-
-void set_mode_and_reset(const OledMode mode) {
-    oled_mode = mode;
-    clear_display();
-    current_column = 0;
-    current_page = 0;
-}
-
-#define MAX_COLUMNS 21
-#define MAX_PAGES   8
-
-void set_cursor_text_col(const uint8_t text_col, const uint8_t page) {
-    const uint8_t pixel_col = text_col * 6;
-    printf("Setting cursor to pixel_col = %d, page = %d\n", pixel_col, page);
-    set_cursor(pixel_col, page);
-}
-
-void send_text_with_delay(const char *text, const int8_t delay_ms) {
-    if (oled_mode == MODE_LINE_BY_LINE) {
-        current_column = 0;
-
-        if (!first_text) {
-            current_page++;
-        }
-        if (current_page >= MAX_PAGES) {
-            current_page = 0;
-        }
-    }
-
-    for (int i = 0; text[i] != '\0'; i++) {
-        set_cursor_text_col(current_column, current_page);
-        send_char(text[i]);
-
-        current_column++;
-        if (current_column >= MAX_COLUMNS) {
-            current_column = 0;
-            current_page++;
-            if (current_page >= MAX_PAGES) {
-                current_page = 0;
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(delay_ms));
-    }
-
-    first_text = false;
-}
-
-void send_text(const char *text) {
-    send_text_with_delay(text, 20);
-}
-
-/**
- * Send text at the given position with updating column and page index.
- * @param text text
- * @param column column
- * @param page page
- */
-void send_text_at(const char *text, const uint8_t column, const uint8_t page) {
-    if (column >= MAX_PAGES) return;
-
-    set_cursor_text_col(column, page);
-    send_text(text);
-}
-
-/**
- *
- * @param text Send text at the given position without changing the column and page index.
- * @param column column
- * @param page page
- */
-void send_text_at_once(const char *text, const uint8_t column, const uint8_t page) {
-    const uint8_t temp_col = current_column;
-    const uint8_t temp_page = current_page;
-
-    send_text_at(text, column, page);
-
-    current_column = temp_col;
-    current_page = temp_page;
-}
-
-void send_page_20x8_no_clear_with_delay(const char *full_text_page[], const uint8_t delay) {
-    if (full_text_page == NULL) return;
-
-    current_column = 0;
-    current_page = 0;
-    first_text = true;
-
-    char line[21];
-
-    for (int i = 0; i < 8; i++) {
-        if (full_text_page[i] == NULL) return;
-
-        strncpy(line, full_text_page[i], 20);
-        line[20] = '\0';
-        send_text_with_delay(line, delay);
-    }
-}
-
-void send_page_20x8_no_clear(const char *full_text_page[]) {
-    send_page_20x8_no_clear_with_delay(full_text_page, 20);
-}
-
-void send_page_20x8_with_delay(const char *full_text_page[], const uint8_t delay) {
-    if (full_text_page == NULL) return;
-
-    clear_display();
-    send_page_20x8_no_clear_with_delay(full_text_page, delay);
-}
-
-void send_page_20x8(const char *full_text_page[]) {
-    send_page_20x8_with_delay(full_text_page, 20);
+    xTaskCreate(display_task, "display_task", 4096, NULL, 1, NULL);
 }

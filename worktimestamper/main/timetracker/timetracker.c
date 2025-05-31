@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define MAX_SESSIONS 10
+#define MAX_SESSIONS 6
 
 struct WorkTimeSession {
     time_t start_time;
@@ -19,6 +19,7 @@ struct WorkTimeSession {
 };
 
 int last_minute = 0;
+int last_second = 0;
 
 bool show_stamps = false;
 bool is_working = false;
@@ -46,21 +47,43 @@ void print_time(const struct tm time_info, const bool with_seconds, const uint8_
     } else {
         snprintf(buffer, sizeof(buffer), "time: %02d:%02d", time_info.tm_hour, time_info.tm_min);
     }
-    send_text_at_once(buffer, column, page);
+    send_text_at(buffer, column, page);
 }
 
-void update_display_with_current_time() {
+void update_timers() {
     const struct tm time_info = get_current_time();
 
+    // update header state
     if (last_minute != time_info.tm_min) {
         last_minute = time_info.tm_min;
 
-        print_time(time_info, false, 0, 0);
+        char buffer[21];
+        snprintf(buffer, sizeof(buffer), "%02d:%02d        %s",
+                 time_info.tm_hour,
+                 time_info.tm_min,
+                 show_stamps ? "summary" : "working");
+
+        send_text_at(buffer, 0, 0);
+    }
+
+    // TODO: nur ein test auf aktuell uhrzeit, noch anpassen auf die aktuelle net time
+    // update working time
+    if (is_working && last_second != time_info.tm_sec) {
+        last_second = time_info.tm_sec;
+
+        char buffer[21];
+        snprintf(buffer, sizeof(buffer),
+                 "net time:   %02d:%02d:%02d",
+                 time_info.tm_hour,
+                 time_info.tm_min,
+                 time_info.tm_sec);
+
+        send_text_at(buffer, 0, 7);
     }
 }
 
 void tutorial() {
-    clear_display();
+    clear_display_and_queue();
 
     const char *tutorial_page[] = {
         "----time synched----",
@@ -72,10 +95,10 @@ void tutorial() {
         "===> press left <===",
         "===>  to start  <===",
     };
-    send_page_20x8(tutorial_page);
+    //send_page_20x8(tutorial_page);
 
     wait_for_state(EVENT_BIT_BUTTON_1_PRESSED);
-    clear_display();
+    clear_display_and_queue();
     get_current_time();
     vTaskDelay(pdMS_TO_TICKS(500));
 }
@@ -84,36 +107,40 @@ void tutorial() {
 // TODO: update_display muss wohl wirklich jede 100ms oder so passieren, weil wir die sekunden aktuell anzeigen wollen für netto i guess
 void update_display() {
     const struct tm time_info = get_current_time();
-    char buffer[50];
-    snprintf(buffer, sizeof(buffer), "       %02d:%02d        ", time_info.tm_hour, time_info.tm_min);
 
-    const char *working_text = is_working ? "You are working!    " : "You are not working!";
+    char buffer[21];
+    snprintf(buffer, sizeof(buffer), "%02d:%02d        %s",
+             time_info.tm_hour,
+             time_info.tm_min,
+             show_stamps ? "summary" : "working");
+
     if (show_stamps) {
         const char *show_stamps_page[] = {
             buffer,
             "                    ",
-            "     >>Summary<<    ",
-            working_text,
+            "                    ",
+            "                    ",
             "                    ",
             "                    ",
             "                    ",
             "                    ",
         };
-        send_page_20x8_no_clear_with_delay(show_stamps_page, 0);
+        //send_page_20x8_no_clear_with_delay(show_stamps_page, 0);
     } else {
         char session[20];
         snprintf(session, sizeof(session), "sessions: %02d      ", current_session_index);
         const char *show_work_page[] = {
             buffer,
             "                    ",
-            "   >>Work  mode<<   ",
-            working_text,
-            session,
+            "                    ",
+            "                    ",
+            "                    ",
+            "                    ",
             "                    ",
             "                    ",
             "                    ",
         };
-        send_page_20x8_no_clear_with_delay(show_work_page, 0);
+        //send_page_20x8_no_clear_with_delay(show_work_page, 0);
     }
 }
 
@@ -160,7 +187,7 @@ void timetracker_task(void *args) {
         if (wait_for_state_with_ms(EVENT_BIT_UPDATE_DISPLAY, 1000)) {
             update_display();
         } else {
-            update_display_with_current_time();
+            update_timers();
         }
     }
 }

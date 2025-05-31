@@ -18,14 +18,25 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 
+enum {
+    WIFI_CONNECT_INFO = 0,
+    WIFI_CONNECTION_STATE = 1,
+    INIT_TIME_SYNC = 3,
+    CLOCK_INFO = 4,
+    WIFI_DISCONNECTED_INFO = 5,
+    CONTROLLER_READY = 7,
+} OLED_OUTPUT;
+
 static bool is_connected;
 static bool should_reconnect = true;
 
-void wifi_log_status(const char *prefix, const bool connected, const int retry_count) {
-    char status_msg[32];
-    snprintf(status_msg, sizeof(status_msg), "%s %s %d",
-             prefix, connected ? "connected" : "disconnected", retry_count);
-    send_text(status_msg);
+void wifi_log_status(const bool connected) {
+    if (connected) {
+        send_text_at_row(" WIFI connected", WIFI_CONNECTION_STATE);
+    } else {
+        send_text_at_row(" WIFI error", WIFI_CONNECTION_STATE);
+        send_text_at_row(" retry...", WIFI_CONNECTION_STATE + 1);
+    }
 }
 
 static void wifi_event_handler(
@@ -125,27 +136,28 @@ static void waitForTime() {
 
     char buffer[50];
     snprintf(buffer, sizeof(buffer), " clock: %02d:%02d", timeInfo.tm_hour, timeInfo.tm_min);
-    send_text(buffer);
+    send_text_at_row(buffer, CLOCK_INFO);
 }
 
 void wifi_sync_task(void *args) {
-    send_text(" start WIFI task");
+    send_text_at_row("Connecting to WIFI", WIFI_CONNECT_INFO);
     if (!is_connected) {
         int retries = 0;
         const bool success = setup_wifi(&retries);
-        wifi_log_status(" WIFI", success, retries);
+        wifi_log_status(success);
     }
 
-    send_text(" init time sync");
+    send_text_at_row("Init time sync", INIT_TIME_SYNC);
     initTimeSync();
     waitForTime();
     disconnect_wifi();
-    send_text(" WIFI disconnected");
-    send_text(" Controller ready");
+    send_text_at_row(" WIFI disconnected", WIFI_DISCONNECTED_INFO);
+    send_text_at_row("Controller ready", CONTROLLER_READY);
     set_event_bit(EVENT_BIT_WIFI_HANDLER_DONE);
     vTaskDelete(NULL);
 }
 
 void init_wifi_sync_handler(const int priority) {
+    clear_display_and_queue();
     xTaskCreate(wifi_sync_task, "wifi_sync_task", 8192, NULL, priority, NULL);
 }
