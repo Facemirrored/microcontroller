@@ -9,7 +9,7 @@ typedef enum {
     EVENT_BIT_WIFI_HANDLER_DONE = BIT1,
     EVENT_BIT_BUTTON_1_PRESSED = BIT2,
     EVENT_BIT_BUTTON_2_PRESSED = BIT3,
-    EVENT_BIT_UPDATE_DISPLAY = BIT4,
+    EVENT_BIT_TUTORIAL_ACTIVE = BIT4,
 } SystemEventBit;
 
 extern EventGroupHandle_t system_event_group;

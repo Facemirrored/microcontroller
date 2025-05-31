@@ -88,7 +88,8 @@ void random_display_fill_once() {
     }
 
     clear_display();
-    send_text_at("  START CONTROLLER  ", 0, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    send_text_at("   START CONTROLLER ", 0, 1);
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
@@ -103,5 +104,5 @@ void app_main(void) {
 
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);
-    //init_timetracker_handler(1);
+    init_timetracker_handler(1);
 }

@@ -25,7 +25,7 @@ enum {
     CLOCK_INFO = 4,
     WIFI_DISCONNECTED_INFO = 5,
     CONTROLLER_READY = 7,
-} OLED_OUTPUT;
+} WIFI_OLED_OUTPUT;
 
 static bool is_connected;
 static bool should_reconnect = true;

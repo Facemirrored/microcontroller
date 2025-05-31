@@ -140,6 +140,20 @@ void display_task() {
     }
 }
 
+void send_page_20x8(const char *full_text_page[]) {
+    if (full_text_page == NULL) return;
+
+    char line[21];
+
+    for (int i = 0; i < 8; i++) {
+        if (full_text_page[i] == NULL) return;
+
+        strncpy(line, full_text_page[i], 20);
+        line[20] = '\0';
+        send_text_at(line, 0, i);
+    }
+}
+
 void init_oled(void) {
     const i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,

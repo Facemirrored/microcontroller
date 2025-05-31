@@ -48,10 +48,5 @@ void clear_event_bit(const SystemEventBit system_event_bit) {
 
 bool event_bit_is_set(const SystemEventBit system_event_bit) {
     const EventBits_t bits = xEventGroupGetBits(system_event_group);
-    if ((bits & system_event_bit) != 0) {
-        clear_event_bit(system_event_bit);
-        return true;
-    }
-
-    return false;
+    return (bits & system_event_bit) != 0;
 }
