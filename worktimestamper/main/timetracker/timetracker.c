@@ -25,7 +25,7 @@ struct WorkTimeSession {
 int last_minute = 0;
 int last_second = 0;
 
-bool show_stamps = false;
+bool is_summary_mode = false;
 bool is_working = false;
 struct WorkTimeSession current_sessions[MAX_SESSIONS];
 uint8_t current_session_index = 0;
@@ -62,11 +62,55 @@ void tutorial() {
     vTaskDelay(pdMS_TO_TICKS(500));
 }
 
+void display_working() {
+    // TODO ausgabe working
+
+    // nur als show case
+    const struct tm time_info = get_current_time();
+    char buffer[21];
+    snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d",
+             time_info.tm_hour,
+             time_info.tm_min,
+             time_info.tm_sec);
+
+    send_text_at_row("                    ", 6);
+    send_text_at_row(buffer, 5);
+}
+
+void display_summary() {
+    // TODO: display summary
+
+    // nur als show case
+    const struct tm time_info = get_current_time();
+    char buffer[21];
+    snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d",
+             time_info.tm_hour,
+             time_info.tm_min,
+             time_info.tm_sec);
+
+    send_text_at_row("                    ", 5);
+    send_text_at_row(buffer, 6);
+}
+
 void track_display_switch_mode_task() {
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
+        // we don't want to react to btn 2 if the tutorial is printed
+        if (event_bit_is_set(EVENT_BIT_TUTORIAL_ACTIVE)) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
         wait_for_state(EVENT_BIT_BUTTON_2_PRESSED);
-        show_stamps = !show_stamps;
+
+        // TODO: wir sollten hier direkt ausgeben
+        is_summary_mode = !is_summary_mode;
+
+        if (is_summary_mode) {
+            display_summary();
+        } else {
+            display_working();
+        }
     }
 }
 
@@ -74,6 +118,11 @@ void track_stamp_task() {
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
         wait_for_state(EVENT_BIT_BUTTON_1_PRESSED);
+
+        // button 1 has no function in summary mode
+        if (is_summary_mode) {
+            continue;
+        }
 
         if (is_working) {
             time(&current_sessions[current_session_index].end_time);
@@ -83,6 +132,8 @@ void track_stamp_task() {
             time(&current_sessions[current_session_index].start_time);
             is_working = true;
         }
+
+        display_working();
     }
 }
 
@@ -91,6 +142,7 @@ void timetracker_task() {
     // - show_stamps -> print summary display (dynamic calculation of in and out tamps (work times diff)
     // - !show_stamps -> print working display (dynamic show last pause, net work, next must have pause
     vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelete(NULL);
 }
 
 void clock_task() {
@@ -107,7 +159,8 @@ void clock_task() {
         if (last_second != time_info.tm_sec) {
             last_second = time_info.tm_sec;
 
-            const char *mode = show_stamps ? "summary" : "working";
+            // TODO: wir sollten nur zeit ausgeben (nicht den status rechts überschreiben)
+            const char *mode = is_summary_mode ? "summary" : "working";
 
             char buffer[21];
             snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d%*s",

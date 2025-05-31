@@ -125,17 +125,28 @@ void display_task() {
 
     // ReSharper disable once CppDFAEndlessLoop
     for (;;) {
+        BaseType_t received = pdFALSE;
+
         // first, we always will send the high-priority messages (by 3 times)
-        while (priority_counter < MAX_HIGH_PRIO_PER_CYCLE
-               && xQueueReceive(high_priority_queue, &message, 0) == pdPASS) {
-            process_display_message(&message);
-            priority_counter++;
+        while (priority_counter < MAX_HIGH_PRIO_PER_CYCLE) {
+            if (xQueueReceive(high_priority_queue, &message, 10) == pdPASS) {
+                process_display_message(&message);
+                priority_counter++;
+                received = pdTRUE;
+            } else {
+                break;
+            }
         }
 
         // then we will send normal-priority messages (reset counter for prio another queue again)
         if (xQueueReceive(normal_priority_queue, &message, 0) == pdPASS) {
             process_display_message(&message);
             priority_counter = 0;
+            received = pdTRUE;
+        }
+
+        if (!received) {
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
 }
