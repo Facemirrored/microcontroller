@@ -119,7 +119,7 @@ void display_summary() {
     char buffer[21];
     const int sum_net_time_h = sum_net_time / 3600;
     const int sum_net_time_m = (sum_net_time % 3600) / 60;
-    const int len = snprintf(buffer, sizeof(buffer), "net work time: %02d:%02d", sum_net_time_m, sum_net_time_h);
+    const int len = snprintf(buffer, sizeof(buffer), "net work time: %02d:%02d", sum_net_time_h, sum_net_time_m);
     if (len >= sizeof(buffer)) {
         // we need this because the compiler is stupid and doesn't know that snprintf returns the number of bytes written,
         // but we do, so it is okay
