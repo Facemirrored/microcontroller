@@ -15,10 +15,8 @@
 
 #define MSG_QUEUE_LEN 20
 #define DISPLAY_CACHE_SIZE 20
-#define MAX_HIGH_PRIO_PER_CYCLE 3
 
-QueueHandle_t high_priority_queue;
-QueueHandle_t normal_priority_queue;
+QueueHandle_t message_queue;
 
 static char current_displayed_lines[8][21]; // cache for current OLED output
 static char latest_text_buffer[8][21]; // cache for last text received
@@ -101,24 +99,13 @@ void send_text_at(const char *text, const uint8_t column, const uint8_t row) {
 
     if (changed) {
         const TextMessage_t message = create_display_message(text, column, row);
-        xQueueSend(normal_priority_queue, &message, 0);
+        xQueueSend(message_queue, &message, 0);
     }
 }
 
 
 void send_text_at_row(const char *text, const uint8_t row) {
     send_text_at(text, 0, row);
-}
-
-void send_high_prio_text_at(const char *text, const uint8_t column, const uint8_t row) {
-    const TextMessage_t message = create_display_message(text, column, row);
-    strncpy(latest_text_buffer[row], text, sizeof(current_displayed_lines[0]) - 1);
-    xQueueSend(high_priority_queue, &message, 0);
-}
-
-
-void send_high_prio_text_at_row(const char *text, const uint8_t row) {
-    send_high_prio_text_at(text, 0, row);
 }
 
 void process_display_message(const TextMessage_t *message) {
@@ -138,32 +125,11 @@ void display_task() {
 
     // ReSharper disable once CppDFAEndlessLoop
     for (;;) {
-        BaseType_t received = pdFALSE;
-
-        while (priority_counter < MAX_HIGH_PRIO_PER_CYCLE) {
-            if (xQueueReceive(high_priority_queue, &message, 10) == pdPASS) {
-                taskENTER_CRITICAL(&buffer_mux);
-                strncpy(message.text, latest_text_buffer[message.row], sizeof(message.text));
-                taskEXIT_CRITICAL(&buffer_mux);
-                process_display_message(&message);
-                priority_counter++;
-                received = pdTRUE;
-            } else {
-                break;
-            }
-        }
-
-        if (xQueueReceive(normal_priority_queue, &message, 0) == pdPASS) {
+        if (xQueueReceive(message_queue, &message, portMAX_DELAY) == pdPASS) {
             taskENTER_CRITICAL(&buffer_mux);
             strncpy(message.text, latest_text_buffer[message.row], sizeof(message.text));
             taskEXIT_CRITICAL(&buffer_mux);
             process_display_message(&message);
-            priority_counter = 0;
-            received = pdTRUE;
-        }
-
-        if (!received) {
-            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 }
@@ -195,8 +161,7 @@ void init_oled(void) {
         i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0));
     ESP_ERROR_CHECK(ssd1306_send_init_sequence());
 
-    high_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
-    normal_priority_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
+    message_queue = xQueueCreate(MSG_QUEUE_LEN, sizeof(TextMessage_t));
 
     clear_display();
 

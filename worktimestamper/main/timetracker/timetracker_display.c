@@ -32,7 +32,7 @@ void display_clock(const struct tm *time_info) {
 
 void display_working(const TimeTrackerState *state) {
     const char *mode = state->is_working ? "working" : "pausing";
-    send_high_prio_text_at(mode, 14, HEADER_ROW);
+    send_text_at(mode, 14, HEADER_ROW);
 
     const time_t work_time = calculate_work_time(state);
     const int h = (int) work_time / 3600;
@@ -50,7 +50,7 @@ void display_working(const TimeTrackerState *state) {
         strcpy(buffer, temp);
     }
 
-    send_high_prio_text_at_row(buffer, NET_WORK_TIME_OW);
+    send_text_at_row(buffer, NET_WORK_TIME_OW);
 
     // Clear summary rows (only needed in this view)
     for (int i = 0; i < 5; i++) {
@@ -99,7 +99,7 @@ void display_summary(const TimeTrackerState *state) {
             }
         }
 
-        send_high_prio_text_at_row(buffer, i + 2);
+        send_text_at_row(buffer, i + 2);
     }
 
     // Clear net row

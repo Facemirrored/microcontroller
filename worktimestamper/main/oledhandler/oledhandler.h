@@ -21,9 +21,6 @@ void send_page_20x8(const char *full_text_page[]);
 
 void send_text_at(const char *text, uint8_t column, uint8_t row);
 
-void send_high_prio_text_at(const char *text, uint8_t column, uint8_t row);
-
 void send_text_at_row(const char *text, uint8_t row);
 
-void send_high_prio_text_at_row(const char *text, uint8_t row);
 #endif
