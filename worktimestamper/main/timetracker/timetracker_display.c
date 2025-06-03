@@ -10,7 +10,8 @@
 #include <systemeventhandler.h>
 
 #define HEADER_ROW 0
-#define NET_ROW 7
+#define LATEST_CHECKOUT_ROW 6
+#define NET_WORK_TIME_OW 7
 #define SUMMARY_HEADER_ROW 1
 
 #define TIME_STRING_SIZE (sizeof("00:00:00"))
@@ -38,16 +39,21 @@ void display_working(const TimeTrackerState *state) {
     const int m = (int) (work_time % 3600) / 60;
     const int s = (int) work_time % 60;
 
-    unsigned const int h_safe = h % 100;
-    unsigned const int m_safe = m % 60;
-    unsigned const int s_safe = s % 60;
+    char temp[64];
+    const int len = snprintf(temp, sizeof(temp), "net work: %02d:%02d:%02d", h, m, s);
 
     char buffer[NET_WORK_STRING_SIZE];
-    snprintf(buffer, sizeof(buffer), "net work: %02d:%02d:%02d", h_safe, m_safe, s_safe);
-    send_high_prio_text_at_row(buffer, NET_ROW);
+    if (len >= sizeof(buffer)) {
+        memcpy(buffer, temp, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+    } else {
+        strcpy(buffer, temp);
+    }
+
+    send_high_prio_text_at_row(buffer, NET_WORK_TIME_OW);
 
     // Clear summary rows (only needed in this view)
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
         send_text_at_row("                    ", SUMMARY_HEADER_ROW + i);
     }
 }
@@ -97,7 +103,7 @@ void display_summary(const TimeTrackerState *state) {
     }
 
     // Clear net row
-    send_text_at_row("                    ", NET_ROW);
+    send_text_at_row("                    ", NET_WORK_TIME_OW);
 }
 
 void display_tutorial(void) {
