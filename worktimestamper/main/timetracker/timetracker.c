@@ -30,8 +30,12 @@ int last_second = 0;
 
 bool is_summary_mode = false;
 bool is_working = false;
-struct WorkTimeSession current_sessions[MAX_SESSIONS];
+
+struct WorkTimeSession current_sessions[MAX_SESSIONS] = {0};
 uint8_t current_session_index = 0;
+
+const time_t TEN_HOURS = 10 * 3600;
+time_t time_to_stop_working = 0;
 
 struct tm get_current_time() {
     time_t now;
@@ -65,9 +69,74 @@ void tutorial() {
     vTaskDelay(pdMS_TO_TICKS(500));
 }
 
+time_t calc_working_times() {
+    time_t work_time = 0;
+
+    ESP_LOGI("CALC", "start with zero (work_time=%lld)", work_time);
+
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        if (current_sessions[i].start_time != 0 && current_sessions[i].end_time != 0) {
+            ESP_LOGI("CALC", "current_session = %d, end_time = %d, start_time = %d",
+                     i, current_sessions[i].end_time, current_sessions[i].start_time);
+
+            work_time += current_sessions[i].end_time - current_sessions[i].start_time;
+
+            ESP_LOGI("CALC", "new work_time = %lld", work_time);
+            continue;
+        }
+
+        if (current_sessions[i].start_time != 0) {
+            time_t now;
+            time(&now);
+
+            ESP_LOGI("CALC", "add start_time = %d to work_time = %lld",
+                     current_sessions[i].start_time, work_time);
+
+            work_time += now - current_sessions[i].start_time;
+
+            ESP_LOGI("CALC", "new work_time = %lld", work_time);
+        }
+    }
+
+    const time_t first_start_time = current_sessions[0].start_time;
+    if (first_start_time != 0 && work_time != 0) {
+        time_to_stop_working = (first_start_time + TEN_HOURS) - (first_start_time + work_time);
+    }
+
+    ESP_LOGI("CALC", "calculated work_time: %lld", work_time);
+    return work_time;
+}
+
 void display_working() {
-    // TODO ausgabe working
-    send_text_at("working", 14, 0);
+    char buffer[8];
+    strncpy(buffer, is_working ? "working" : "pausing", sizeof(buffer));
+    send_text_at(buffer, 14, HEADER_TIME_MODE);
+
+    const time_t work_time = calc_working_times();
+
+    const int hours = work_time / 3600;
+    const int minutes = (work_time % 3600) / 60;
+    const int seconds = work_time % 60;
+
+    ESP_LOGI("DISPLAY-WORKING", "work_time = %lld, hours = %d, minutes = %d", work_time, hours, minutes);
+    char net_work_time_buffer[21];
+    const int len = snprintf(net_work_time_buffer, sizeof(net_work_time_buffer), "net work: %02d:%02d:%02d  ",
+                             hours, minutes, seconds);
+    ESP_LOGI("DISPLAY-WORKING", "net_work_time_buffer = %s", net_work_time_buffer);
+
+    if (len >= sizeof(buffer)) {
+        // we need this because the compiler is stupid and doesn't know that snprintf returns the number of bytes written,
+        // but we do, so it is okay
+        ESP_LOGW("SNPRINTF", "Buffer truncated!");
+    }
+
+    send_high_prio_text_at_row(net_work_time_buffer, NET_TIME_ROW);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER + 1);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER + 2);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER + 3);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER + 4);
+    send_text_at_row("                    ", SUMMARY_TABLE_HEADER + 5);
 }
 
 void display_summary() {
@@ -78,6 +147,9 @@ void display_summary() {
 
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const struct WorkTimeSession *session = &current_sessions[i];
+
+        ESP_LOGI("DISPLAY-SUMMARY", "session->start_time = %lld, session->end_time = %lld",
+                 session->start_time, session->end_time);
 
         if (session->start_time == 0 && session->end_time == 0) {
             continue;
@@ -90,6 +162,7 @@ void display_summary() {
 
         if (session->end_time == 0) {
             snprintf(buffer, sizeof(buffer), "%02d:%02d | --:-- |--:--", start_time_tm.tm_hour, start_time_tm.tm_min);
+            send_text_at_row(buffer, i + 2);
             continue;
         }
 
@@ -116,17 +189,7 @@ void display_summary() {
         send_text_at_row(buffer, i + 2);
     }
 
-    char buffer[21];
-    const int sum_net_time_h = sum_net_time / 3600;
-    const int sum_net_time_m = (sum_net_time % 3600) / 60;
-    const int len = snprintf(buffer, sizeof(buffer), "net work time: %02d:%02d", sum_net_time_h, sum_net_time_m);
-    if (len >= sizeof(buffer)) {
-        // we need this because the compiler is stupid and doesn't know that snprintf returns the number of bytes written,
-        // but we do, so it is okay
-        ESP_LOGW("SNPRINTF", "Buffer truncated!");
-    }
-
-    send_text_at_row(buffer, NET_TIME_ROW);
+    send_text_at_row("                    ", NET_TIME_ROW);
 }
 
 void track_display_switch_mode_task() {
@@ -144,8 +207,6 @@ void track_display_switch_mode_task() {
 
         if (is_summary_mode) {
             display_summary();
-        } else {
-            display_working();
         }
     }
 }
@@ -161,6 +222,10 @@ void track_stamp_task() {
         }
 
         if (is_working) {
+            current_sessions[current_session_index] = (struct WorkTimeSession){
+                .start_time = 0,
+                .end_time = 0,
+            };
             time(&current_sessions[current_session_index].end_time);
             current_session_index++;
         } else {
@@ -175,7 +240,7 @@ void track_stamp_task() {
 void clock_task() {
     // ReSharper disable once CppDFAEndlessLoop
     while (1) {
-        // we don't update display if tutorial is printed
+        // we don't update display if the tutorial is printed
         if (event_bit_is_set(EVENT_BIT_TUTORIAL_ACTIVE)) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -193,9 +258,12 @@ void clock_task() {
                      time_info.tm_sec);
 
             send_text_at_row(buffer, HEADER_TIME_MODE);
+
+            if (!is_summary_mode) {
+                display_working();
+            }
         }
 
-        // TODO: we should print here the net time stuff if present
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -207,8 +275,6 @@ void init_timetracker_handler(const uint8_t priority) {
     vTaskDelay(pdMS_TO_TICKS(100));
     tutorial();
 
-    send_text_at("working", 14, 0);
-    send_text_at_row("Net time: 00:00", NET_TIME_ROW);
 
     // clock print task (current time and net time etc.)
     xTaskCreate(clock_task, "clock_task", 4096, NULL, priority, NULL);
