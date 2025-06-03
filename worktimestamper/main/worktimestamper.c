@@ -1,9 +1,8 @@
 #include <esp_log.h>
 #include "buttonisrhandler.h"
-#include "oledhandler.c"
 #include "wifisynchandler.h"
 #include "systemeventhandler.h"
-#include "timetracker.h"
+#include "timetracker_controller.c"
 
 #include <string.h>
 #include <lwip/apps/sntp.h>
@@ -35,5 +34,6 @@ void app_main(void) {
 
     init_button_isr_handler(3);
     init_wifi_sync_handler(2);
-    init_timetracker_handler(1);
+
+    timetracker_start(1);
 }
