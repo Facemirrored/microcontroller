@@ -20,17 +20,19 @@
 QueueHandle_t high_priority_queue;
 QueueHandle_t normal_priority_queue;
 
-static char display_cache[8][21]; // Cache of current display lines
+static char current_displayed_lines[8][21]; // cache for current OLED output
+static char latest_text_buffer[8][21]; // cache for last text received
+static portMUX_TYPE buffer_mux = portMUX_INITIALIZER_UNLOCKED; // safe for latest_text_buffer
 
 bool is_display_update_needed(const TextMessage_t *msg) {
     if (msg->row >= 8 || msg->column != 0) return true; // skip optimization if column != 0
-    return strncmp(display_cache[msg->row], msg->text, sizeof(display_cache[0])) != 0;
+    return strncmp(current_displayed_lines[msg->row], msg->text, sizeof(current_displayed_lines[0])) != 0;
 }
 
 void update_display_cache(const TextMessage_t *msg) {
     if (msg->row < 8 && msg->column == 0) {
-        strncpy(display_cache[msg->row], msg->text, sizeof(display_cache[0]) - 1);
-        display_cache[msg->row][sizeof(display_cache[0]) - 1] = '\0';
+        strncpy(current_displayed_lines[msg->row], msg->text, sizeof(current_displayed_lines[0]) - 1);
+        current_displayed_lines[msg->row][sizeof(current_displayed_lines[0]) - 1] = '\0';
     }
 }
 
@@ -56,7 +58,7 @@ void clear_display() {
     i2c_master_write_to_device(I2C_MASTER_NUM, SSD1306_ADDR, data_buf, sizeof(data_buf), pdMS_TO_TICKS(1000));
 
     for (int i = 0; i < 8; i++) {
-        display_cache[i][0] = '\0';
+        current_displayed_lines[i][0] = '\0';
     }
 }
 
@@ -85,9 +87,24 @@ TextMessage_t create_display_message(const char *text, const uint8_t column, con
 }
 
 void send_text_at(const char *text, const uint8_t column, const uint8_t row) {
-    const TextMessage_t message = create_display_message(text, column, row);
-    xQueueSend(normal_priority_queue, &message, 0);
+    if (row >= 8 || column != 0) return;
+
+    bool changed = false;
+
+    taskENTER_CRITICAL(&buffer_mux);
+    if (strncmp(latest_text_buffer[row], text, 20) != 0) {
+        strncpy(latest_text_buffer[row], text, 20);
+        latest_text_buffer[row][20] = '\0';
+        changed = true;
+    }
+    taskEXIT_CRITICAL(&buffer_mux);
+
+    if (changed) {
+        const TextMessage_t message = create_display_message(text, column, row);
+        xQueueSend(normal_priority_queue, &message, 0);
+    }
 }
+
 
 void send_text_at_row(const char *text, const uint8_t row) {
     send_text_at(text, 0, row);
@@ -95,8 +112,10 @@ void send_text_at_row(const char *text, const uint8_t row) {
 
 void send_high_prio_text_at(const char *text, const uint8_t column, const uint8_t row) {
     const TextMessage_t message = create_display_message(text, column, row);
+    strncpy(latest_text_buffer[row], text, sizeof(current_displayed_lines[0]) - 1);
     xQueueSend(high_priority_queue, &message, 0);
 }
+
 
 void send_high_prio_text_at_row(const char *text, const uint8_t row) {
     send_high_prio_text_at(text, 0, row);
@@ -123,6 +142,9 @@ void display_task() {
 
         while (priority_counter < MAX_HIGH_PRIO_PER_CYCLE) {
             if (xQueueReceive(high_priority_queue, &message, 10) == pdPASS) {
+                taskENTER_CRITICAL(&buffer_mux);
+                strncpy(message.text, latest_text_buffer[message.row], sizeof(message.text));
+                taskEXIT_CRITICAL(&buffer_mux);
                 process_display_message(&message);
                 priority_counter++;
                 received = pdTRUE;
@@ -132,6 +154,9 @@ void display_task() {
         }
 
         if (xQueueReceive(normal_priority_queue, &message, 0) == pdPASS) {
+            taskENTER_CRITICAL(&buffer_mux);
+            strncpy(message.text, latest_text_buffer[message.row], sizeof(message.text));
+            taskEXIT_CRITICAL(&buffer_mux);
             process_display_message(&message);
             priority_counter = 0;
             received = pdTRUE;
@@ -143,15 +168,15 @@ void display_task() {
     }
 }
 
+
 void send_page_20x8(const char *full_text_page[]) {
     if (!full_text_page) return;
     char line[21];
 
     for (int i = 0; i < 8; i++) {
-        if (!full_text_page[i]) return;
         strncpy(line, full_text_page[i], 20);
         line[20] = '\0';
-        send_text_at(line, 0, i);
+        send_text_at_row(line, i);
     }
 }
 
