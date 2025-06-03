@@ -49,7 +49,7 @@ static void clock_task(void *arg) {
 
         if (time_info.tm_sec != last_second) {
             last_second = time_info.tm_sec;
-            display_clock(&time_info);
+            display_clock(&time_info, state->is_working);
 
             if (!state->is_summary_mode) {
                 display_working(state);

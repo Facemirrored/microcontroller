@@ -29,7 +29,7 @@ void app_main(void) {
     init_system_event_group();
     init_oled();
 
-    send_text_at("   START CONTROLLER ", 0, 1);
+    send_text_at_row("   START CONTROLLER ", 1);
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     init_button_isr_handler(3);

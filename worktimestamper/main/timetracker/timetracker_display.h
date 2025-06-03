@@ -10,7 +10,7 @@ void display_working(const TimeTrackerState *state);
 void display_summary(const TimeTrackerState *state);
 
 // Show current time (HH:MM:SS) at top row
-void display_clock(const struct tm *time_info);
+void display_clock(const struct tm *time_info, bool is_working);
 
 // show tutorial
 void display_tutorial(void);

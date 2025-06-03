@@ -22,17 +22,31 @@ static_assert(TIME_STRING_SIZE == 9, "Buffer size must be 19 bytes");
 static_assert(NET_WORK_STRING_SIZE == 19, "Buffer size must be 19 bytes");
 static_assert(EMPTY_TIME_STRING_SIZE == 21, "Buffer size must be 19 bytes");
 
-void display_clock(const struct tm *time_info) {
-    char time_buf[TIME_STRING_SIZE];
-    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d",
-             time_info->tm_hour, time_info->tm_min, time_info->tm_sec);
+void display_clock(const struct tm *time_info, const bool is_working) {
+    char time_buf[21];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d     %s",
+             time_info->tm_hour,
+             time_info->tm_min,
+             time_info->tm_sec,
+             is_working ? "working" : "pausing");
 
     send_text_at_row(time_buf, HEADER_ROW);
 }
 
 void display_working(const TimeTrackerState *state) {
-    const char *mode = state->is_working ? "working" : "pausing";
-    send_text_at(mode, 14, HEADER_ROW);
+    time_t now;
+    struct tm time_info;
+    time(&now);
+    localtime_r(&now, &time_info);
+
+    char time_buf[21];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d     %s",
+             time_info.tm_hour,
+             time_info.tm_min,
+             time_info.tm_sec,
+             state->is_working ? "working" : "pausing");
+
+    send_text_at_row(time_buf, HEADER_ROW);
 
     const time_t work_time = calculate_work_time(state);
     const int h = (int) work_time / 3600;
@@ -59,7 +73,18 @@ void display_working(const TimeTrackerState *state) {
 }
 
 void display_summary(const TimeTrackerState *state) {
-    send_text_at("summary", 14, HEADER_ROW);
+    time_t now;
+    struct tm time_info;
+    time(&now);
+    localtime_r(&now, &time_info);
+
+    char time_buf[21];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d     summary",
+             time_info.tm_hour,
+             time_info.tm_min,
+             time_info.tm_sec);
+
+    send_text_at_row(time_buf, HEADER_ROW);
     send_text_at_row("start |  end  | net ", SUMMARY_HEADER_ROW);
 
     for (int i = 0; i < MAX_SESSIONS; i++) {

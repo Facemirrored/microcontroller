@@ -121,7 +121,6 @@ void process_display_message(const TextMessage_t *message) {
 
 void display_task() {
     TextMessage_t message;
-    uint8_t priority_counter = 0;
 
     // ReSharper disable once CppDFAEndlessLoop
     for (;;) {
