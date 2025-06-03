@@ -32,7 +32,7 @@ void display_clock(const struct tm *time_info) {
 
 void display_working(const TimeTrackerState *state) {
     const char *mode = state->is_working ? "working" : "pausing";
-    send_text_at(mode, 14, HEADER_ROW);
+    send_high_prio_text_at(mode, 14, HEADER_ROW);
 
     const time_t work_time = calculate_work_time(state);
     const int h = (int) work_time / 3600;
@@ -99,7 +99,7 @@ void display_summary(const TimeTrackerState *state) {
             }
         }
 
-        send_text_at_row(buffer, i + 2);
+        send_high_prio_text_at_row(buffer, i + 2);
     }
 
     // Clear net row
